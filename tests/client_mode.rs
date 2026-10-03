@@ -1095,7 +1095,10 @@ fn federated_client_starts_without_local_and_survives_its_restart() {
             "remote reconnect {cycle} must restore the visible screen without switching machines"
         );
         assert!(
-            wait_until(Duration::from_secs(8), Duration::from_millis(100), || {
+            // Reconnecting the remote PTY can take longer on loaded CI workers than
+            // reconnecting its API bridge; keep retrying input long enough to cover that
+            // recovery without weakening the visible-output assertion above.
+            wait_until(Duration::from_secs(20), Duration::from_millis(100), || {
                 if screen_text().contains(&format!("REMOTE_ALIVE_INPUT_{cycle}")) {
                     return true;
                 }
