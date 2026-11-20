@@ -2813,6 +2813,9 @@ impl SshStdioBridge {
             while !thread_stop.load(Ordering::Acquire) {
                 match listener.accept() {
                     Ok(stream) => {
+                        if thread_stop.load(Ordering::Acquire) {
+                            break;
+                        }
                         let stream = match prepare_remote_bridge_stream(stream) {
                             Ok(stream) => stream,
                             Err(err) => {
@@ -2881,12 +2884,12 @@ fn prepare_remote_bridge_stream(
 impl Drop for SshStdioBridge {
     fn drop(&mut self) {
         self.should_stop.store(true, Ordering::Release);
-        #[cfg(unix)]
-        let _ = crate::ipc::remove_socket_file_if_owned(&self.local_socket, &self.socket_identity);
+        // Wake the accept-poll loop so Drop does not wait for its next polling interval.
+        // The stop check in the listener prevents this wake-up connection from spawning SSH.
+        let _ = crate::ipc::connect_local_stream(&self.local_socket);
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
-        #[cfg(windows)]
         let _ = crate::ipc::remove_socket_file_if_owned(&self.local_socket, &self.socket_identity);
     }
 }
